@@ -12,6 +12,8 @@ const fmtFecha = (valor) => {
 };
 
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+const PORCENTAJE_COMISION = 0.05;
+const comisionDe = (v) => (Number(v.liquidable) || 0) * PORCENTAJE_COMISION;
 
 function esAprobada(estado) {
     return (estado || "").toString().toLowerCase().includes("aprob");
@@ -32,7 +34,7 @@ function agruparPorMes(ventas) {
             grupos[clave] = { clave, capitas: 0, comision: 0, cantidad: 0, fecha: new Date(v.fecha) };
         }
         grupos[clave].capitas += Number(v.capitas) || 0;
-        grupos[clave].comision += Number(v.liquidable) || 0;
+        grupos[clave].comision += comisionDe(v);
         grupos[clave].cantidad += 1;
     });
     return Object.values(grupos).sort((a, b) => a.fecha - b.fecha);
@@ -152,7 +154,7 @@ function renderTabla(ventas) {
         <td>${fmtMoney(v.valorPlan)}</td>
         <td>${v.capitas ?? "-"}</td>
         <td>${fmtFecha(v.fecha)}</td>
-        <td class="money-cell">${fmtMoney(v.liquidable)}</td>
+        <td class="money-cell">${fmtMoney(comisionDe(v))}</td>
         <td><span class="pill ${esAprobada(v.estado) ? "pill-aprobada" : "pill-otro"}">${(v.estado || "-").toString().toUpperCase()}</span></td>
       </tr>
     `).join("");
@@ -166,7 +168,7 @@ async function iniciarDashboard() {
 
     const totalGeneral = aprobadas.reduce((acc, v) => {
         acc.capitas += Number(v.capitas) || 0;
-        acc.comision += Number(v.liquidable) || 0;
+        acc.comision += comisionDe(v);
         return acc;
     }, { capitas: 0, comision: 0 });
 
