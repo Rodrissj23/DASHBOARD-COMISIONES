@@ -1,7 +1,7 @@
 {
-  "name": "Perfil Rodrigo Altamura - Comisiones",
+  "name": "Zeroka - Comisiones",
   "short_name": "Comisiones RA",
-  "start_url": "./perfil_rodrigo_altamura.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#F4F6F8",
   "theme_color": "#152238",
