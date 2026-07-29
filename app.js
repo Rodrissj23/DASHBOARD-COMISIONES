@@ -171,9 +171,11 @@ function renderChart(periodos) {
 
     if (FILTRO_ACTUAL) {
         panelChart.style.display = "none";
+        document.getElementById("lower").classList.add("full-width");
         return;
     }
     panelChart.style.display = "";
+    document.getElementById("lower").classList.remove("full-width");
 
     if (periodos.length < 2) {
         contChart.innerHTML = `<div class="empty">Todavía no hay suficientes períodos para graficar.</div>`;
