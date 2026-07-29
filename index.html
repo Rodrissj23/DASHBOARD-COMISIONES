@@ -328,8 +328,27 @@
     letter-spacing: 0.02em;
   }
 
+  .desglose {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+
+  .desglose > div {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+
+  .desglose .neg { color: var(--coral); }
+
+  .money-cell.neg { color: var(--coral); }
+
   .pill-aprobada { background: var(--mint-bg); color: var(--mint-text); }
   .pill-otro { background: #EEF0F5; color: var(--ink-soft); }
+  .pill-descomision { background: #FDEBEA; color: #D64545; }
 
   .empty, .loading {
     padding: 40px 0;
@@ -416,7 +435,7 @@
 
       <div class="panel">
         <div class="table-head">
-          <h2 id="tablaTitulo">Últimas Ventas Aprobadas</h2>
+          <h2 id="tablaTitulo">Últimos Movimientos</h2>
           <div class="table-head-actions">
             <input type="text" class="search-input" id="buscador" placeholder="Buscar por nombre o DNI…">
             <span class="badge-count" id="tableBadge"></span>
