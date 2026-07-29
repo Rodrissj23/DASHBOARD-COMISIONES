@@ -115,12 +115,41 @@
 
   .cards {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 20px;
     margin-bottom: 28px;
   }
 
   .cards.single { grid-template-columns: minmax(260px, 380px); }
+
+  .variacion {
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 10px;
+  }
+
+  .variacion.up { color: var(--teal-dark); }
+  .variacion.down { color: var(--coral); }
+
+  .meta-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--ink-faint);
+    margin-top: 8px;
+  }
+
+  .search-input {
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    outline: none;
+    width: 200px;
+  }
+
+  .search-input:focus { border-color: var(--purple); }
 
   .card {
     background: var(--card-bg);
@@ -368,7 +397,10 @@
       <div class="panel">
         <div class="table-head">
           <h2 style="margin:0;" id="tablaTitulo">Últimas Ventas Aprobadas</h2>
-          <span class="badge-count" id="tableBadge"></span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <input type="text" class="search-input" id="buscador" placeholder="Buscar por nombre o DNI…">
+            <span class="badge-count" id="tableBadge"></span>
+          </div>
         </div>
         <table>
           <thead>
@@ -404,3 +436,4 @@
 <script src="app.js"></script>
 </body>
 </html>
+  
