@@ -14,11 +14,14 @@ const fmtFecha = (valor) => {
 const PORCENTAJE_COMISION = 0.05;
 const comisionDe = (v) => (Number(v.liquidable) || 0) * PORCENTAJE_COMISION;
 
+// Meta de comisión para el período en curso. Cambiala acá cuando quieras ajustarla.
+const META_MENSUAL = 600000;
+
 function esAprobada(estado) {
     return (estado || "").toString().toLowerCase().includes("aprob");
 }
 
-// Clave de agrupamiento: usa el campo "periodo" cargado a mano en la planilla.
+// Clave de agrupamiento: usa el campo "periodo" (columna o nombre de pestaña).
 function claveGrupo(v) {
     const p = (v.periodo || "").toString().trim();
     return p || "Sin período";
@@ -42,10 +45,19 @@ function agruparPorPeriodo(ventas) {
     return Object.values(grupos).sort((a, b) => a.primeraFecha - b.primeraFecha);
 }
 
+function variacionHTML(actual, anterior) {
+    if (!anterior || anterior.comision <= 0) return "";
+    const pct = ((actual.comision - anterior.comision) / anterior.comision) * 100;
+    const subio = pct >= 0;
+    const flecha = subio ? "▲" : "▼";
+    return `<div class="variacion ${subio ? "up" : "down"}">${flecha} ${Math.abs(Math.round(pct))}% vs. ${anterior.clave}</div>`;
+}
+
 // ---- Estado global de la app ----
 let TODAS_APROBADAS = [];
 let TODOS_PERIODOS = [];
 let FILTRO_ACTUAL = null; // null = vista general, o clave de período
+let TEXTO_BUSQUEDA = "";
 
 function renderCards(periodos, totalGeneral) {
     const cont = document.getElementById("cards");
@@ -53,7 +65,9 @@ function renderCards(periodos, totalGeneral) {
     cont.classList.remove("single");
 
     if (FILTRO_ACTUAL) {
-        const p = periodos.find(x => x.clave === FILTRO_ACTUAL);
+        const idxP = periodos.findIndex(x => x.clave === FILTRO_ACTUAL);
+        const p = periodos[idxP];
+        const anterior = idxP > 0 ? periodos[idxP - 1] : null;
         cont.classList.add("single");
         if (!p) {
             cont.innerHTML = `<div class="empty">No hay ventas para este período.</div>`;
@@ -72,20 +86,24 @@ function renderCards(periodos, totalGeneral) {
                 <span class="card-caption">Cápitas · Tu comisión (5%)</span>
               </div>
             </div>
+            ${variacionHTML(p, anterior)}
           </div>
         `);
         return;
     }
 
     const ultimosDos = periodos.slice(-2);
+    const actual = ultimosDos[ultimosDos.length - 1];
+    const anterior = ultimosDos.length > 1 ? ultimosDos[0] : null;
     const iconos = [
         { icon: "icon-orange", fill: "fill-orange", emoji: "📅" },
         { icon: "icon-teal", fill: "fill-teal", emoji: "📈" }
     ];
-    const maxValor = Math.max(totalGeneral.comision, ...ultimosDos.map(p => p.comision), 1);
+    const maxValor = Math.max(...ultimosDos.map(p => p.comision), 1);
 
     ultimosDos.forEach((periodo, i) => {
         const pct = Math.min(100, (periodo.comision / maxValor) * 100);
+        const esActual = periodo === actual;
         cont.insertAdjacentHTML("beforeend", `
           <div class="card">
             <div class="card-top">
@@ -100,27 +118,50 @@ function renderCards(periodos, totalGeneral) {
               </div>
             </div>
             <div class="bar-track"><div class="bar-fill ${iconos[i].fill}" style="width:${pct}%"></div></div>
+            ${esActual ? variacionHTML(actual, anterior) : ""}
           </div>
         `);
     });
 
-    const pctTotal = Math.min(100, (totalGeneral.comision / maxValor) * 100);
+    // Tarjeta de promedio por liquidación (reemplaza al viejo "Total Acumulado")
+    const promedio = periodos.length > 0 ? totalGeneral.comision / periodos.length : 0;
+    const promedioCapitas = periodos.length > 0 ? Math.round(totalGeneral.capitas / periodos.length) : 0;
     cont.insertAdjacentHTML("beforeend", `
       <div class="card">
         <div class="card-top">
-          <span class="card-label">Total Acumulado</span>
+          <span class="card-label">Promedio por Liquidación</span>
           <span class="card-icon icon-purple">Σ</span>
         </div>
         <div class="card-body">
-          <span class="card-count">${totalGeneral.capitas}</span>
+          <span class="card-count">${promedioCapitas}</span>
           <div class="card-money-wrap">
-            <span class="card-money">${fmtMoney(totalGeneral.comision)}</span>
-            <span class="card-caption">Cápitas · Tu comisión (5%)</span>
+            <span class="card-money">${fmtMoney(promedio)}</span>
+            <span class="card-caption">Cápitas prom. · Comisión promedio</span>
           </div>
         </div>
-        <div class="bar-track"><div class="bar-fill fill-purple" style="width:${pctTotal}%"></div></div>
       </div>
     `);
+
+    // Tarjeta de meta mensual, medida contra el período más reciente
+    if (actual) {
+        const pctMeta = Math.min(100, (actual.comision / META_MENSUAL) * 100);
+        cont.insertAdjacentHTML("beforeend", `
+          <div class="card">
+            <div class="card-top">
+              <span class="card-label">Meta del Período</span>
+              <span class="card-icon icon-orange">🎯</span>
+            </div>
+            <div class="card-body">
+              <span class="card-money">${fmtMoney(actual.comision)}</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill fill-orange" style="width:${pctMeta}%"></div></div>
+            <div class="meta-info">
+              <span>${Math.round(pctMeta)}% de la meta</span>
+              <span>Meta: ${fmtMoney(META_MENSUAL)}</span>
+            </div>
+          </div>
+        `);
+    }
 }
 
 function renderChart(periodos) {
@@ -134,39 +175,55 @@ function renderChart(periodos) {
     }
     panelChart.style.display = "";
 
-    const ultimosDos = periodos.slice(-2);
-
-    if (ultimosDos.length < 2) {
+    if (periodos.length < 2) {
         contChart.innerHTML = `<div class="empty">Todavía no hay suficientes períodos para graficar.</div>`;
         nota.textContent = "";
         return;
     }
 
-    const [p1, p2] = ultimosDos;
-    const w = 260, h = 140, padX = 34, padY = 24;
-    const max = Math.max(p1.comision, p2.comision, 1);
-    const y1 = padY + (1 - p1.comision / max) * (h - padY * 2);
-    const y2 = padY + (1 - p2.comision / max) * (h - padY * 2);
-    const x1 = padX, x2 = w - padX;
+    // Gráfico con TODOS los períodos, no solo los últimos dos
+    const anchoPorPunto = 90;
+    const h = 150, padX = 34, padY = 24;
+    const w = Math.max(260, periodos.length * anchoPorPunto);
+    const max = Math.max(...periodos.map(p => p.comision), 1);
+    const min = Math.min(...periodos.map(p => p.comision), 0);
+    const rango = Math.max(max - min, 1);
+
+    const puntos = periodos.map((p, i) => {
+        const x = periodos.length === 1
+            ? w / 2
+            : padX + (i * (w - padX * 2)) / (periodos.length - 1);
+        const y = padY + (1 - (p.comision - min) / rango) * (h - padY * 2);
+        return { x, y, p };
+    });
+
+    const pathD = puntos.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x} ${pt.y}`).join(" ");
+
+    const circulos = puntos.map(pt => `<circle cx="${pt.x}" cy="${pt.y}" r="5" fill="#0F9D8E"/>`).join("");
+    const etiquetasValor = puntos.map(pt => `<text x="${pt.x}" y="${pt.y - 12}" font-size="10" fill="#1B2138" font-weight="700" text-anchor="middle">${fmtMoney(pt.p.comision)}</text>`).join("");
+    const etiquetasEje = puntos.map(pt => `<text x="${pt.x}" y="${h}" font-size="9.5" fill="#9AA1B2" text-anchor="middle">${pt.p.clave}</text>`).join("");
 
     contChart.innerHTML = `
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">
-        <line x1="${x1}" y1="${h - padY}" x2="${x2}" y2="${h - padY}" stroke="#E7E9F0" stroke-width="1"/>
-        <line x1="${x1}" y1="${padY - 10}" x2="${x1}" y2="${h - padY}" stroke="#E7E9F0" stroke-width="1"/>
-        <path d="M ${x1} ${y1} L ${x2} ${y2}" stroke="#0F9D8E" stroke-width="2.5" fill="none"/>
-        <circle cx="${x1}" cy="${y1}" r="5" fill="#F2994A"/>
-        <circle cx="${x2}" cy="${y2}" r="5" fill="#0F9D8E"/>
-        <text x="${x1}" y="${y1 - 12}" font-size="11" fill="#1B2138" font-weight="700">${fmtMoney(p1.comision)}</text>
-        <text x="${x2}" y="${y2 - 12}" font-size="11" fill="#1B2138" font-weight="700" text-anchor="end">${fmtMoney(p2.comision)}</text>
-        <text x="${x1}" y="${h}" font-size="10" fill="#9AA1B2">${p1.clave}</text>
-        <text x="${x2}" y="${h}" font-size="10" fill="#9AA1B2" text-anchor="end">${p2.clave}</text>
-      </svg>
+      <div style="overflow-x:auto;">
+        <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="min-width:100%;">
+          <line x1="${padX}" y1="${h - padY}" x2="${w - padX}" y2="${h - padY}" stroke="#E7E9F0" stroke-width="1"/>
+          <path d="${pathD}" stroke="#0F9D8E" stroke-width="2.5" fill="none"/>
+          ${circulos}
+          ${etiquetasValor}
+          ${etiquetasEje}
+        </svg>
+      </div>
     `;
 
-    const totalDosPeriodos = p1.comision + p2.comision;
-    const pctUltimo = totalDosPeriodos > 0 ? Math.round((p2.comision / totalDosPeriodos) * 100) : 0;
-    const totalVentasDosPeriodos = p1.cantidad + p2.cantidad;
-    nota.innerHTML = `${p2.clave} concentra <b>el ${pctUltimo}%</b> de tu comisión aprobada hasta el momento (${p2.cantidad} de las ${totalVentasDosPeriodos} ventas del período).`;
+    const actual = periodos[periodos.length - 1];
+    const anterior = periodos.length > 1 ? periodos[periodos.length - 2] : null;
+    if (anterior && anterior.comision > 0) {
+        const pct = Math.round(((actual.comision - anterior.comision) / anterior.comision) * 100);
+        const subio = pct >= 0;
+        nota.innerHTML = `${actual.clave} viene <b>${subio ? "un " + pct + "% arriba" : "un " + Math.abs(pct) + "% abajo"}</b> de ${anterior.clave}.`;
+    } else {
+        nota.textContent = "";
+    }
 }
 
 function renderTabla(ventas) {
@@ -176,9 +233,17 @@ function renderTabla(ventas) {
 
     titulo.textContent = FILTRO_ACTUAL ? `Ventas · ${FILTRO_ACTUAL}` : "Últimas Ventas Aprobadas";
 
-    const filtradas = FILTRO_ACTUAL
+    let filtradas = FILTRO_ACTUAL
         ? ventas.filter(v => claveGrupo(v) === FILTRO_ACTUAL)
         : ventas;
+
+    if (TEXTO_BUSQUEDA.trim()) {
+        const q = TEXTO_BUSQUEDA.trim().toLowerCase();
+        filtradas = filtradas.filter(v =>
+            (v.nombre || "").toString().toLowerCase().includes(q) ||
+            (v.dni || "").toString().toLowerCase().includes(q)
+        );
+    }
 
     if (filtradas.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty">No hay ventas aprobadas para mostrar.</td></tr>`;
@@ -289,6 +354,11 @@ async function iniciarDashboard() {
     document.getElementById("btnResumen").addEventListener("click", () => mostrarVista("dashboard"));
     document.getElementById("btnLiquidaciones").addEventListener("click", () => mostrarVista("menu"));
     document.getElementById("chipFiltroQuitar").addEventListener("click", quitarFiltro);
+
+    document.getElementById("buscador").addEventListener("input", (e) => {
+        TEXTO_BUSQUEDA = e.target.value;
+        renderTabla(TODAS_APROBADAS);
+    });
 }
 
 document.addEventListener("DOMContentLoaded", iniciarDashboard);
