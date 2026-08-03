@@ -72,8 +72,8 @@ function agruparPorPeriodo(movimientos) {
 }
 
 function variacionHTML(actual, anterior) {
-    if (!anterior || anterior.liquidacionTotal <= 0) return "";
-    const pct = ((actual.liquidacionTotal - anterior.liquidacionTotal) / anterior.liquidacionTotal) * 100;
+    if (!anterior || anterior.comisionNeta <= 0) return "";
+    const pct = ((actual.comisionNeta - anterior.comisionNeta) / anterior.comisionNeta) * 100;
     const subio = pct >= 0;
     const flecha = subio ? "▲" : "▼";
     return `<div class="variacion ${subio ? "up" : "down"}">${flecha} ${Math.abs(Math.round(pct))}% vs. ${anterior.clave}</div>`;
@@ -85,6 +85,7 @@ function desgloseHTML(p) {
         <div><span>Sueldo</span><span>${fmtMoney(SUELDO_FIJO)}</span></div>
         <div><span>Comisiones</span><span>${fmtMoney(p.comisionBruta)}</span></div>
         ${p.descomisiones > 0 ? `<div><span>Descomisiones</span><span class="neg">-${fmtMoney(p.descomisiones)}</span></div>` : ""}
+        <div class="desglose-total"><span>Liquidación total</span><span>${fmtMoney(p.liquidacionTotal)}</span></div>
       </div>
     `;
 }
@@ -118,8 +119,8 @@ function renderCards(periodos) {
             <div class="card-body">
               <span class="card-count">${p.capitas}</span>
               <div class="card-money-wrap">
-                <span class="card-money">${fmtMoney(p.liquidacionTotal)}</span>
-                <span class="card-caption">Cápitas · Liquidación total</span>
+                <span class="card-money">${fmtMoney(p.comisionNeta)}</span>
+                <span class="card-caption">Cápitas · Comisión neta</span>
               </div>
             </div>
             ${desgloseHTML(p)}
@@ -136,10 +137,10 @@ function renderCards(periodos) {
         { icon: "icon-orange", fill: "fill-orange", emoji: "📅" },
         { icon: "icon-teal", fill: "fill-teal", emoji: "📈" }
     ];
-    const maxValor = Math.max(...ultimosDos.map(p => p.liquidacionTotal), 1);
+    const maxValor = Math.max(...ultimosDos.map(p => p.comisionNeta), 1);
 
     ultimosDos.forEach((periodo, i) => {
-        const pct = Math.min(100, (periodo.liquidacionTotal / maxValor) * 100);
+        const pct = Math.min(100, (periodo.comisionNeta / maxValor) * 100);
         const esActual = periodo === actual;
         cont.insertAdjacentHTML("beforeend", `
           <div class="card">
@@ -150,8 +151,8 @@ function renderCards(periodos) {
             <div class="card-body">
               <span class="card-count">${periodo.capitas}</span>
               <div class="card-money-wrap">
-                <span class="card-money">${fmtMoney(periodo.liquidacionTotal)}</span>
-                <span class="card-caption">Cápitas · Liquidación total</span>
+                <span class="card-money">${fmtMoney(periodo.comisionNeta)}</span>
+                <span class="card-caption">Cápitas · Comisión neta</span>
               </div>
             </div>
             <div class="bar-track"><div class="bar-fill ${iconos[i].fill}" style="width:${pct}%"></div></div>
@@ -161,9 +162,9 @@ function renderCards(periodos) {
         `);
     });
 
-    // Promedio por liquidación (total, sueldo incluido)
-    const promedioTotal = periodos.length > 0
-        ? periodos.reduce((s, p) => s + p.liquidacionTotal, 0) / periodos.length
+    // Promedio por liquidación (de la comisión neta, el sueldo es fijo y no aporta al promedio)
+    const promedioComision = periodos.length > 0
+        ? periodos.reduce((s, p) => s + p.comisionNeta, 0) / periodos.length
         : 0;
     const promedioCapitas = periodos.length > 0
         ? Math.round(periodos.reduce((s, p) => s + p.capitas, 0) / periodos.length)
@@ -177,8 +178,8 @@ function renderCards(periodos) {
         <div class="card-body">
           <span class="card-count">${promedioCapitas}</span>
           <div class="card-money-wrap">
-            <span class="card-money">${fmtMoney(promedioTotal)}</span>
-            <span class="card-caption">Cápitas prom. · Liquidación promedio</span>
+            <span class="card-money">${fmtMoney(promedioComision)}</span>
+            <span class="card-caption">Cápitas prom. · Comisión promedio</span>
           </div>
         </div>
       </div>
@@ -228,22 +229,22 @@ function renderChart(periodos) {
     const anchoPorPunto = 90;
     const h = 150, padX = 34, padY = 24;
     const w = Math.max(260, periodos.length * anchoPorPunto);
-    const max = Math.max(...periodos.map(p => p.liquidacionTotal), 1);
-    const min = Math.min(...periodos.map(p => p.liquidacionTotal), 0);
+    const max = Math.max(...periodos.map(p => p.comisionNeta), 1);
+    const min = Math.min(...periodos.map(p => p.comisionNeta), 0);
     const rango = Math.max(max - min, 1);
 
     const puntos = periodos.map((p, i) => {
         const x = periodos.length === 1
             ? w / 2
             : padX + (i * (w - padX * 2)) / (periodos.length - 1);
-        const y = padY + (1 - (p.liquidacionTotal - min) / rango) * (h - padY * 2);
+        const y = padY + (1 - (p.comisionNeta - min) / rango) * (h - padY * 2);
         return { x, y, p };
     });
 
     const pathD = puntos.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x} ${pt.y}`).join(" ");
 
     const circulos = puntos.map(pt => `<circle cx="${pt.x}" cy="${pt.y}" r="5" fill="#0F9D8E"/>`).join("");
-    const etiquetasValor = puntos.map(pt => `<text x="${pt.x}" y="${pt.y - 12}" font-size="10" fill="#1B2138" font-weight="700" text-anchor="middle">${fmtMoney(pt.p.liquidacionTotal)}</text>`).join("");
+    const etiquetasValor = puntos.map(pt => `<text x="${pt.x}" y="${pt.y - 12}" font-size="10" fill="#1B2138" font-weight="700" text-anchor="middle">${fmtMoney(pt.p.comisionNeta)}</text>`).join("");
     const etiquetasEje = puntos.map(pt => `<text x="${pt.x}" y="${h}" font-size="9.5" fill="#9AA1B2" text-anchor="middle">${pt.p.clave}</text>`).join("");
 
     contChart.innerHTML = `
@@ -260,10 +261,10 @@ function renderChart(periodos) {
 
     const actual = periodos[periodos.length - 1];
     const anterior = periodos.length > 1 ? periodos[periodos.length - 2] : null;
-    if (anterior && anterior.liquidacionTotal > 0) {
-        const pct = Math.round(((actual.liquidacionTotal - anterior.liquidacionTotal) / anterior.liquidacionTotal) * 100);
+    if (anterior && anterior.comisionNeta > 0) {
+        const pct = Math.round(((actual.comisionNeta - anterior.comisionNeta) / anterior.comisionNeta) * 100);
         const subio = pct >= 0;
-        nota.innerHTML = `${actual.clave} viene <b>${subio ? "un " + pct + "% arriba" : "un " + Math.abs(pct) + "% abajo"}</b> de ${anterior.clave} (liquidación total).`;
+        nota.innerHTML = `${actual.clave} viene <b>${subio ? "un " + pct + "% arriba" : "un " + Math.abs(pct) + "% abajo"}</b> de ${anterior.clave} (comisión neta).`;
     } else {
         nota.textContent = "";
     }
@@ -331,7 +332,7 @@ function renderMenu(periodos) {
     grid.innerHTML = ordenMenu.map(p => `
       <button class="menu-card" data-clave="${p.clave.replace(/"/g, '&quot;')}">
         <div class="clave">${p.clave}</div>
-        <div class="monto">${fmtMoney(p.liquidacionTotal)}</div>
+        <div class="monto">${fmtMoney(p.comisionNeta)}</div>
         <div class="detalle">${p.cantidadVentas} ventas · ${p.capitas} cápitas${p.cantidadDescomisiones > 0 ? ` · ${p.cantidadDescomisiones} descom.` : ""}</div>
       </button>
     `).join("");
