@@ -20,6 +20,9 @@ const META_MENSUAL = 600000;
 // Sueldo fijo que se suma en cada liquidación.
 const SUELDO_FIJO = 800000;
 
+// Fecha estimada del próximo corte de producción (formato AAAA-MM-DD). Actualizala cada vez que la sepas.
+const PROXIMA_FECHA_CORTE = "2026-08-28";
+
 function esAprobada(estado) {
     return (estado || "").toString().toLowerCase().includes("aprob");
 }
@@ -101,6 +104,138 @@ function liquidacionCardHTML(p) {
     `;
 }
 
+function diasHastaCorte() {
+    const hoy = new Date();
+    const corte = new Date(PROXIMA_FECHA_CORTE + "T23:59:59");
+    return Math.ceil((corte - hoy) / (1000 * 60 * 60 * 24));
+}
+
+function corteCardHTML() {
+    const dias = diasHastaCorte();
+    const corte = new Date(PROXIMA_FECHA_CORTE + "T12:00:00");
+    const fechaTexto = fmtFecha(corte);
+    let texto, sub;
+    if (dias > 0) {
+        texto = `${dias} día${dias === 1 ? "" : "s"}`;
+        sub = `Para el corte del ${fechaTexto}`;
+    } else if (dias === 0) {
+        texto = "Hoy";
+        sub = "Es el día del corte";
+    } else {
+        texto = "Cerrado";
+        sub = `El corte era el ${fechaTexto}`;
+    }
+    return `
+      <div class="card">
+        <div class="card-top">
+          <span class="card-label">Próximo Corte</span>
+          <span class="card-icon icon-teal">⏳</span>
+        </div>
+        <div class="card-body">
+          <div class="card-money-wrap">
+            <span class="card-money" style="color:var(--ink);">${texto}</span>
+            <span class="card-caption">${sub}</span>
+          </div>
+        </div>
+      </div>
+    `;
+}
+
+function proyeccionCardHTML(actual) {
+    if (!actual) return "";
+    const hoy = new Date();
+    const corte = new Date(PROXIMA_FECHA_CORTE + "T23:59:59");
+    if (hoy > corte) return ""; // el período ya cerró, no proyectamos
+
+    const inicio = actual.primeraFecha;
+    const diasTranscurridos = Math.max(1, Math.ceil((hoy - inicio) / (1000 * 60 * 60 * 24)));
+    const diasTotales = Math.max(diasTranscurridos, Math.ceil((corte - inicio) / (1000 * 60 * 60 * 24)));
+    const ritmoDiario = actual.comisionNeta / diasTranscurridos;
+    const proyeccion = ritmoDiario * diasTotales;
+
+    return `
+      <div class="card">
+        <div class="card-top">
+          <span class="card-label">Proyección de Cierre</span>
+          <span class="card-icon icon-orange">🔮</span>
+        </div>
+        <div class="card-body">
+          <div class="card-money-wrap">
+            <span class="card-money">${fmtMoney(proyeccion)}</span>
+            <span class="card-caption">Comisión estimada para ${actual.clave}</span>
+          </div>
+        </div>
+      </div>
+    `;
+}
+
+function descargarComprobante() {
+    if (!FILTRO_ACTUAL) return;
+    const p = TODOS_PERIODOS.find(x => x.clave === FILTRO_ACTUAL);
+    if (!p) return;
+
+    const movimientos = TODOS_MOVIMIENTOS
+        .filter(v => claveGrupo(v) === FILTRO_ACTUAL)
+        .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+    const filas = movimientos.map((v, i) => {
+        const descom = esDescomision(v.estado);
+        return `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${v.nombre || "-"}<br><span style="color:#9AA1B2;">${v.dni || "-"}</span></td>
+            <td>${fmtMoney(v.valorPlan)}</td>
+            <td>${v.capitas ?? "-"}</td>
+            <td>${fmtFecha(v.fecha)}</td>
+            <td style="color:${descom ? "#D64545" : "#1B2138"};">${descom ? "-" : ""}${fmtMoney(comisionDe(v))}</td>
+            <td>${(v.estado || "-").toString().toUpperCase()}</td>
+          </tr>
+        `;
+    }).join("");
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es"><head><meta charset="UTF-8">
+      <title>Comprobante ${p.clave}</title>
+      <style>
+        body { font-family: Arial, Helvetica, sans-serif; padding: 32px; color: #1B2138; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .sub { color: #6B7280; font-size: 12.5px; margin-bottom: 24px; }
+        .resumen { max-width: 320px; margin-bottom: 24px; }
+        .resumen div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px; }
+        .resumen .total { font-weight: bold; border-top: 1px solid #333; margin-top: 6px; padding-top: 8px; font-size: 15px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+        th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #E7E9F0; vertical-align: top; }
+        th { color: #6B7280; font-size: 10px; text-transform: uppercase; }
+        @media print { body { padding: 12px; } }
+      </style>
+      </head><body>
+        <h1>Comprobante de Liquidación — ${p.clave}</h1>
+        <div class="sub">Generado el ${fmtFecha(new Date())}</div>
+        <div class="resumen">
+          <div><span>Sueldo</span><span>${fmtMoney(SUELDO_FIJO)}</span></div>
+          <div><span>Comisiones</span><span>${fmtMoney(p.comisionBruta)}</span></div>
+          ${p.descomisiones > 0 ? `<div><span>Descomisiones</span><span>-${fmtMoney(p.descomisiones)}</span></div>` : ""}
+          <div class="total"><span>Liquidación Total</span><span>${fmtMoney(p.liquidacionTotal)}</span></div>
+        </div>
+        <table>
+          <thead><tr><th>#</th><th>Titular / DNI</th><th>Valor Plan</th><th>Cápitas</th><th>Fecha</th><th>Comisión</th><th>Estado</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </body></html>
+    `;
+
+    const ventana = window.open("", "_blank");
+    if (!ventana) {
+        alert("El navegador bloqueó la ventana emergente. Habilitá los pop-ups para este sitio e intentá de nuevo.");
+        return;
+    }
+    ventana.document.write(html);
+    ventana.document.close();
+    ventana.focus();
+    setTimeout(() => ventana.print(), 300);
+}
+
 // ---- Estado global de la app ----
 let TODOS_MOVIMIENTOS = [];
 let TODOS_PERIODOS = [];
@@ -137,6 +272,12 @@ function renderCards(periodos) {
           </div>
         `);
         cont.insertAdjacentHTML("beforeend", liquidacionCardHTML(p));
+
+        const esUltimo = idxP === periodos.length - 1;
+        if (esUltimo) {
+            const proy = proyeccionCardHTML(p);
+            if (proy) cont.insertAdjacentHTML("beforeend", proy);
+        }
         return;
     }
 
@@ -174,6 +315,13 @@ function renderCards(periodos) {
     // Tarjeta separada de Liquidación Total (sueldo + comisión neta) del período más reciente
     if (actual) {
         cont.insertAdjacentHTML("beforeend", liquidacionCardHTML(actual));
+    }
+
+    cont.insertAdjacentHTML("beforeend", corteCardHTML());
+
+    if (actual) {
+        const proy = proyeccionCardHTML(actual);
+        if (proy) cont.insertAdjacentHTML("beforeend", proy);
     }
 
     // Promedio por liquidación (de la comisión neta, el sueldo es fijo y no aporta al promedio)
@@ -372,11 +520,14 @@ function renderTodo() {
 function actualizarChip() {
     const chip = document.getElementById("chipFiltro");
     const texto = document.getElementById("chipFiltroTexto");
+    const btnComprobante = document.getElementById("btnComprobante");
     if (FILTRO_ACTUAL) {
         chip.style.display = "inline-flex";
         texto.textContent = `Viendo: ${FILTRO_ACTUAL}`;
+        btnComprobante.style.display = "inline-flex";
     } else {
         chip.style.display = "none";
+        btnComprobante.style.display = "none";
     }
 }
 
@@ -410,6 +561,7 @@ async function iniciarDashboard() {
     document.getElementById("btnResumen").addEventListener("click", () => mostrarVista("dashboard"));
     document.getElementById("btnLiquidaciones").addEventListener("click", () => mostrarVista("menu"));
     document.getElementById("chipFiltroQuitar").addEventListener("click", quitarFiltro);
+    document.getElementById("btnComprobante").addEventListener("click", descargarComprobante);
 
     document.getElementById("buscador").addEventListener("input", (e) => {
         TEXTO_BUSQUEDA = e.target.value;
