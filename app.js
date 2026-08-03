@@ -79,13 +79,24 @@ function variacionHTML(actual, anterior) {
     return `<div class="variacion ${subio ? "up" : "down"}">${flecha} ${Math.abs(Math.round(pct))}% vs. ${anterior.clave}</div>`;
 }
 
-function desgloseHTML(p) {
+function liquidacionCardHTML(p) {
     return `
-      <div class="desglose">
-        <div><span>Sueldo</span><span>${fmtMoney(SUELDO_FIJO)}</span></div>
-        <div><span>Comisiones</span><span>${fmtMoney(p.comisionBruta)}</span></div>
-        ${p.descomisiones > 0 ? `<div><span>Descomisiones</span><span class="neg">-${fmtMoney(p.descomisiones)}</span></div>` : ""}
-        <div class="desglose-total"><span>Liquidación total</span><span>${fmtMoney(p.liquidacionTotal)}</span></div>
+      <div class="card">
+        <div class="card-top">
+          <span class="card-label">Liquidación Total</span>
+          <span class="card-icon icon-purple">💰</span>
+        </div>
+        <div class="card-body">
+          <div class="card-money-wrap">
+            <span class="card-money">${fmtMoney(p.liquidacionTotal)}</span>
+            <span class="card-caption">Sueldo + Comisión neta</span>
+          </div>
+        </div>
+        <div class="desglose">
+          <div><span>Sueldo</span><span>${fmtMoney(SUELDO_FIJO)}</span></div>
+          <div><span>Comisiones</span><span>${fmtMoney(p.comisionBruta)}</span></div>
+          ${p.descomisiones > 0 ? `<div><span>Descomisiones</span><span class="neg">-${fmtMoney(p.descomisiones)}</span></div>` : ""}
+        </div>
       </div>
     `;
 }
@@ -105,7 +116,6 @@ function renderCards(periodos) {
         const idxP = periodos.findIndex(x => x.clave === FILTRO_ACTUAL);
         const p = periodos[idxP];
         const anterior = idxP > 0 ? periodos[idxP - 1] : null;
-        cont.classList.add("single");
         if (!p) {
             cont.innerHTML = `<div class="empty">No hay movimientos para este período.</div>`;
             return;
@@ -123,10 +133,10 @@ function renderCards(periodos) {
                 <span class="card-caption">Cápitas · Comisión neta</span>
               </div>
             </div>
-            ${desgloseHTML(p)}
             ${variacionHTML(p, anterior)}
           </div>
         `);
+        cont.insertAdjacentHTML("beforeend", liquidacionCardHTML(p));
         return;
     }
 
@@ -156,11 +166,15 @@ function renderCards(periodos) {
               </div>
             </div>
             <div class="bar-track"><div class="bar-fill ${iconos[i].fill}" style="width:${pct}%"></div></div>
-            ${desgloseHTML(periodo)}
             ${esActual ? variacionHTML(actual, anterior) : ""}
           </div>
         `);
     });
+
+    // Tarjeta separada de Liquidación Total (sueldo + comisión neta) del período más reciente
+    if (actual) {
+        cont.insertAdjacentHTML("beforeend", liquidacionCardHTML(actual));
+    }
 
     // Promedio por liquidación (de la comisión neta, el sueldo es fijo y no aporta al promedio)
     const promedioComision = periodos.length > 0
